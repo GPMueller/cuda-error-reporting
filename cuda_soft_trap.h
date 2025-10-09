@@ -12,7 +12,7 @@ static __device__ int g_stop_token                      = 0;
 static __device__ int g_stream_error_flags[MAX_STREAMS] = { 0 };
 
 // Device function to trigger soft trap
-// This sets the global stop token and exits the current thread
+// This sets the global stop token and exits the current thread cleanly
 __device__ void softTrap()
 {
     // Atomically set stop token to 1
@@ -22,19 +22,18 @@ __device__ void softTrap()
     __threadfence_system();
 
     // Exit the current thread using PTX
-    // This terminates the thread without corrupting the CUDA context
+    // This terminates the thread cleanly without triggering any errors
     asm volatile( "exit;" );
 }
 
 // Kernel to check if stop token is set
-// If stop token is set, this kernel records an error for this stream
-// but does NOT corrupt the context (no trap, no illegal memory access)
+// If stop token is set, this kernel records an error and triggers a stream error via nullptr dereference
 __global__ void check_ok_kernel( int stream_id )
 {
     // Only thread 0 of block 0 checks and records
     if( blockIdx.x == 0 && threadIdx.x == 0 )
     {
-        if( g_stop_token == 1 )
+        if( g_stop_token >= 1 )
         {
             // Record error for this stream
             if( stream_id >= 0 && stream_id < MAX_STREAMS )
@@ -42,6 +41,17 @@ __global__ void check_ok_kernel( int stream_id )
                 atomicExch( &g_stream_error_flags[stream_id], 1 );
             }
             __threadfence_system();
+
+            // Trigger a stream error via nullptr dereference
+            // This causes cudaStreamSynchronize to return cudaErrorIllegalAddress
+            volatile int* null_ptr = nullptr;
+            volatile int dummy = *null_ptr;
+
+            // Use the result to prevent optimization
+            if( dummy > 0 )
+            {
+                atomicExch( &g_stop_token, 3 );
+            }
         }
     }
 }

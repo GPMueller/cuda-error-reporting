@@ -16,21 +16,21 @@ to the host without requiring explicit parameter passing.
 
 ### 2. Soft Trap Mechanism (`cuda_soft_trap.h`)
 A soft error mechanism that allows kernels to signal errors and gracefully
-cancel operations across multiple streams without corrupting the CUDA context.
+cancel operations across multiple streams with proper error reporting to the host.
 
 **Key capabilities:**
 - Global stop token shared across all streams
-- Soft trap function that signals errors without context corruption
-- Per-stream error detection
-- Context remains valid after error for recovery operations
-- Uses PTX `exit;` instruction for clean thread termination
+- Soft trap triggers per-stream errors
+- `cudaStreamSynchronize()` returns error codes (`cudaErrorIllegalAddress`)
+- Requires `cudaDeviceReset()` for recovery (process continues, no restart needed)
 
 **How it works:**
 1. A kernel detects an error condition and calls `softTrap()`
-2. `softTrap()` atomically sets a global stop token
-3. Other kernels can check the stop token via `check_ok()` kernel
-4. Errors are recorded per-stream without hardware traps
-5. Host can detect errors and recover without restarting the CUDA context
+2. `softTrap()` atomically sets a global stop token and exits cleanly
+3. After each kernel, launch `check_ok()` to check the stop token
+4. `check_ok()` dereferences nullptr when stop token is set, triggering stream error
+5. All streams with `check_ok()` report errors via `cudaStreamSynchronize()`
+6. Host detects errors and calls `cudaDeviceReset()` to recover
 
 
 ## Running Examples

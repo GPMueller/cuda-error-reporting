@@ -132,13 +132,18 @@ int main()
     vector_add_with_check<<<blocksPerGrid, threadsPerBlock, 0, stream2>>>( d_a2, d_b2, d_c2, N, false );
     SoftTrap::launchCheckOk( stream2, 1 ); // Check after stream 2 kernel
 
-    // Synchronize streams
+    // Synchronize streams (expect errors due to nullptr dereference)
     cudaError_t err1 = cudaStreamSynchronize( stream1 );
     cudaError_t err2 = cudaStreamSynchronize( stream2 );
 
     std::cout << "Streams synchronized" << std::endl;
     std::cout << "  Stream 1 status: " << cudaGetErrorString( err1 ) << std::endl;
     std::cout << "  Stream 2 status: " << cudaGetErrorString( err2 ) << std::endl;
+
+    if( err1 != cudaSuccess || err2 != cudaSuccess )
+    {
+        std::cout << "✓ Streams reported errors as expected (soft trap via nullptr dereference)" << std::endl;
+    }
     std::cout << std::endl;
 
     // Check soft trap status
@@ -175,42 +180,50 @@ int main()
 
     // === Demonstrate context recovery ===
     std::cout << "=== Demonstrating Context Recovery ===" << std::endl;
-    std::cout << "Resetting soft trap and launching successful kernel..." << std::endl;
-    std::cout << std::endl;
 
-    // Reset the soft trap state
-    SoftTrap::reset();
+    // Check if we have a persistent error that requires device reset
+    cudaError_t persistent_err = cudaGetLastError();
+    std::cout << "Persistent error check: " << cudaGetErrorString( persistent_err ) << std::endl;
 
-    // Launch a successful kernel to prove context is still valid
-    vector_add_normal<<<blocksPerGrid, threadsPerBlock, 0, stream1>>>( d_a1, d_b1, d_c1, N );
-    cudaError_t recovery_err = cudaStreamSynchronize( stream1 );
-
-    std::cout << "Recovery kernel status: " << cudaGetErrorString( recovery_err ) << std::endl;
-
-    if( recovery_err == cudaSuccess )
+    if( persistent_err != cudaSuccess )
     {
-        cudaMemcpy( h_c1, d_c1, size, cudaMemcpyDeviceToHost );
-        std::cout << "✓ Context is still valid! Successfully computed vector addition." << std::endl;
-        printVector( "Recovered output", h_c1, N );
-
-        // Verify result
-        bool correct = true;
-        for( int i = 0; i < N; i++ )
-        {
-            if( fabs( h_c1[i] - 3.0f ) > 1e-5 )
-            {
-                correct = false;
-                break;
-            }
-        }
-        if( correct )
-        {
-            std::cout << "✓ Result is correct (1.0 + 2.0 = 3.0)" << std::endl;
-        }
+        std::cout << "Context has persistent error - cudaDeviceReset() required" << std::endl;
     }
     else
     {
-        std::cout << "✗ Context appears to be corrupted" << std::endl;
+        std::cout << "No persistent error - attempting recovery without reset..." << std::endl;
+        std::cout << std::endl;
+
+        // Reset the soft trap state
+        SoftTrap::reset();
+
+        // Launch a successful kernel to prove context is still valid
+        vector_add_normal<<<blocksPerGrid, threadsPerBlock, 0, stream1>>>( d_a1, d_b1, d_c1, N );
+        cudaError_t recovery_err = cudaStreamSynchronize( stream1 );
+
+        std::cout << "Recovery kernel status: " << cudaGetErrorString( recovery_err ) << std::endl;
+
+        if( recovery_err == cudaSuccess )
+        {
+            cudaMemcpy( h_c1, d_c1, size, cudaMemcpyDeviceToHost );
+            std::cout << "✓ Context is still valid! Successfully computed vector addition." << std::endl;
+            printVector( "Recovered output", h_c1, N );
+
+            // Verify result
+            bool correct = true;
+            for( int i = 0; i < N; i++ )
+            {
+                if( fabs( h_c1[i] - 3.0f ) > 1e-5 )
+                {
+                    correct = false;
+                    break;
+                }
+            }
+            if( correct )
+            {
+                std::cout << "✓ Result is correct (1.0 + 2.0 = 3.0)" << std::endl;
+            }
+        }
     }
 
     // Cleanup
