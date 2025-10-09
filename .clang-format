@@ -6,7 +6,7 @@ AllowShortCaseLabelsOnASingleLine:   true
 AllowShortFunctionsOnASingleLine:    Empty
 AllowShortIfStatementsOnASingleLine: false
 BreakBeforeBraces:                   Allman
-ColumnLimit:                         90
+ColumnLimit:                         120
 FixNamespaceComments:                false
 IndentCaseLabels:                    true
 IndentWidth:                         4
@@ -19,7 +19,7 @@ UseTab:                              Never
 ---
 ### C++ specific config ###
 Language:                  Cpp
-Standard:                  c++17
+Standard:                  c++14
 Cpp11BracedListStyle:      false
 NamespaceIndentation:      None
 CompactNamespaces:         true
