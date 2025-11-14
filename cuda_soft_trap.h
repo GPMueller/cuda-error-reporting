@@ -42,16 +42,19 @@ __global__ void check_ok_kernel( int stream_id )
             }
             __threadfence_system();
 
+            // Unfortunately there's doesn't seem to be a way to cause a "soft" error that doesn't trigger a hardware
+            // trap and corrupts the context
+            /*
             // Trigger a stream error via nullptr dereference
             // This causes cudaStreamSynchronize to return cudaErrorIllegalAddress
             volatile int* null_ptr = nullptr;
             volatile int dummy = *null_ptr;
-
             // Use the result to prevent optimization
             if( dummy > 0 )
             {
                 atomicExch( &g_stop_token, 3 );
             }
+            */
         }
     }
 }
